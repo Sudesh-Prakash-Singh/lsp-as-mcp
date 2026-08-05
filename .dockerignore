@@ -1,7 +1,0 @@
-node_modules/
-dist/
-target/
-.mvn/
-.git/
-*.log
-logs/

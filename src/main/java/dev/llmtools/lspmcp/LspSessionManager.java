@@ -12,13 +12,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class LspSessionManager {
   private final ServerConfig config;
   private final CommandAvailability commandAvailability;
-  private final DockerSupport dockerSupport;
   private final Map<String, LspClient> sessions = new ConcurrentHashMap<>();
 
-  public LspSessionManager(ServerConfig config, CommandAvailability commandAvailability, DockerSupport dockerSupport) {
+  public LspSessionManager(ServerConfig config, CommandAvailability commandAvailability) {
     this.config = config;
     this.commandAvailability = commandAvailability;
-    this.dockerSupport = dockerSupport;
   }
 
   public LspClient get(String language, String rootPathOrUri) {
@@ -39,24 +37,6 @@ public class LspSessionManager {
     }
   }
 
-  public void prepareDocker(String language, String rootPathOrUri) {
-    var normalizedLanguage = language.toLowerCase(Locale.ROOT);
-    var root = UriUtils.toPath(rootPathOrUri);
-    dockerSupport.prepare(root, config.profile(normalizedLanguage));
-  }
-
-  public DockerSupport.DockerCommandResult dockerExec(String language, String rootPathOrUri, String command) {
-    var normalizedLanguage = language.toLowerCase(Locale.ROOT);
-    var root = UriUtils.toPath(rootPathOrUri);
-    return dockerSupport.execShell(root, config.profile(normalizedLanguage), command);
-  }
-
-  public DockerSupport.DockerStatus dockerStatus(String language, String rootPathOrUri) {
-    var normalizedLanguage = language.toLowerCase(Locale.ROOT);
-    var root = UriUtils.toPath(rootPathOrUri);
-    return dockerSupport.status(root, config.profile(normalizedLanguage));
-  }
-
   @PreDestroy
   public void closeAll() {
     for (var client : sessions.values()) {
@@ -68,34 +48,30 @@ public class LspSessionManager {
   private LspClient createSession(String language, Path root) {
     var profile = config.profile(language);
     var transport = createTransport(profile, root);
-    var pathMapper = transport instanceof DockerLspTransport
-      ? LspPathMapper.docker(root, DockerSupport.CONTAINER_ROOT)
-      : LspPathMapper.identity(root);
-    return new LspClient(profile, pathMapper.serverRootUri(), transport, pathMapper);
+    return new LspClient(profile, root.toUri().toString(), transport);
   }
 
   private LspTransport createTransport(LspProfile profile, Path root) {
     return switch (profile.transport()) {
       case TCP -> new TcpLspTransport(profile.host(), profile.port() == null ? 0 : profile.port());
-      case DOCKER -> new DockerLspTransport(dockerSupport, profile, root);
-      case STDIO -> createStdioOrDockerFallback(profile, root);
+      case STDIO -> createStdio(profile, root);
     };
   }
 
-  private LspTransport createStdioOrDockerFallback(LspProfile profile, Path root) {
+  private LspTransport createStdio(LspProfile profile, Path root) {
     if (commandAvailability.isAvailable(profile.command())) {
       return new StdioLspTransport(profile.command(), root);
     }
-    if (dockerSupport.available() && !profile.dockerCommand().isEmpty()) {
-      return new DockerLspTransport(dockerSupport, profile, root);
-    }
+    var hint = profile.installHint() == null || profile.installHint().isBlank()
+      ? "Install the language server and ensure the executable is on PATH."
+      : profile.installHint();
     throw new IllegalStateException(
       "LSP command not found on PATH for "
         + profile.language()
         + ": "
         + profile.command()
-        + ". Docker fallback is unavailable: "
-        + dockerSupport.unavailableReason()
+        + ". "
+        + hint
     );
   }
 

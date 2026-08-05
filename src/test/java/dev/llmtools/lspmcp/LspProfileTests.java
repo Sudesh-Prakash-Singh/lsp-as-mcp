@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class LspProfileTests {
   @Test
-  void dockerCommandDefaultsToLocalCommand() {
+  void normalizesLanguageAndCopiesCommand() {
     var profile = new LspProfile(
       "TypeScript",
       "typescript",
@@ -18,18 +18,17 @@ class LspProfileTests {
       null,
       null,
       null,
-      null,
-      null,
-      null,
-      Set.of()
+      Set.of(),
+      "Install with npm"
     );
 
     assertThat(profile.language()).isEqualTo("typescript");
-    assertThat(profile.dockerCommand()).containsExactly("typescript-language-server", "--stdio");
+    assertThat(profile.command()).containsExactly("typescript-language-server", "--stdio");
+    assertThat(profile.installHint()).isEqualTo("Install with npm");
   }
 
   @Test
-  void parsesDockerTransportKind() {
-    assertThat(LspProfile.TransportKind.from("docker")).isEqualTo(LspProfile.TransportKind.DOCKER);
+  void defaultsTransportToStdio() {
+    assertThat(LspProfile.TransportKind.from(null)).isEqualTo(LspProfile.TransportKind.STDIO);
   }
 }

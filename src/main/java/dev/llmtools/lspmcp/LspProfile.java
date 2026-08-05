@@ -11,13 +11,11 @@ public record LspProfile(
   String languageId,
   TransportKind transport,
   List<String> command,
-  List<String> dockerCommand,
-  List<String> dockerInstallCommands,
-  String dockerImage,
   String host,
   Integer port,
   JsonNode initializationOptions,
-  Set<String> features
+  Set<String> features,
+  String installHint
 ) {
   public LspProfile {
     if (language == null || language.isBlank()) {
@@ -31,14 +29,11 @@ public record LspProfile(
       transport = TransportKind.STDIO;
     }
     command = command == null ? List.of() : List.copyOf(command);
-    dockerCommand = dockerCommand == null ? command : List.copyOf(dockerCommand);
-    dockerInstallCommands = dockerInstallCommands == null ? List.of() : List.copyOf(dockerInstallCommands);
     features = features == null ? Set.of() : Set.copyOf(features);
   }
 
   public enum TransportKind {
     STDIO,
-    DOCKER,
     TCP;
 
     static TransportKind from(String raw) {

@@ -31,12 +31,10 @@ public class LspMcpTools {
           "languageId", profile.languageId(),
           "transport", profile.transport().name().toLowerCase(),
           "command", profile.command(),
-          "dockerCommand", profile.dockerCommand(),
-          "dockerInstallCommands", profile.dockerInstallCommands(),
-          "dockerImage", profile.dockerImage(),
           "host", profile.host(),
           "port", profile.port(),
-          "features", profile.features()
+          "features", profile.features(),
+          "installHint", profile.installHint()
         ));
       });
     return pretty(result);
@@ -77,44 +75,6 @@ public class LspMcpTools {
   ) {
     sessions.disconnect(language, root);
     return pretty(object("ok", true));
-  }
-
-  @McpTool(name = "docker_setup", description = "Build or start the Docker sandbox and run the configured profile setup commands.")
-  public String dockerSetup(
-    @McpToolParam(description = "Configured language/profile key.", required = true) String language,
-    @McpToolParam(description = "Project root path or file URI.", required = true) String root
-  ) {
-    sessions.prepareDocker(language, root);
-    return pretty(object("ok", true));
-  }
-
-  @McpTool(name = "docker_status", description = "Report Docker fallback availability and sandbox configuration for a language/root.")
-  public String dockerStatus(
-    @McpToolParam(description = "Configured language/profile key.", required = true) String language,
-    @McpToolParam(description = "Project root path or file URI.", required = true) String root
-  ) {
-    var status = sessions.dockerStatus(language, root);
-    return pretty(object(
-      "enabled", status.enabled(),
-      "available", status.available(),
-      "unavailableReason", status.unavailableReason(),
-      "image", status.image(),
-      "installCommandCount", status.installCommandCount(),
-      "hasDockerCommand", status.hasDockerCommand()
-    ));
-  }
-
-  @McpTool(name = "docker_exec", description = "Run a shell command inside the managed Docker sandbox for a language/root.")
-  public String dockerExec(
-    @McpToolParam(description = "Configured language/profile key.", required = true) String language,
-    @McpToolParam(description = "Project root path or file URI.", required = true) String root,
-    @McpToolParam(description = "Shell command to run inside the sandbox container.", required = true) String command
-  ) {
-    var result = sessions.dockerExec(language, root, command);
-    return pretty(object(
-      "exitCode", result.exitCode(),
-      "output", result.output()
-    ));
   }
 
   @McpTool(name = "definition", description = "Find definitions for a symbol position using a configured language server.")
