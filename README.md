@@ -57,10 +57,10 @@ Example `~/.codex/config.toml` entry:
 enabled = true
 command = "java"
 args = ["-jar", "D:\\fun-projects\\lsp-as-mcp\\target\\lsp-as-mcp.jar"]
-cwd = "D:\\fun-projects\\lsp-as-mcp"
 ```
 
 Using a short MCP server key such as `lsp` keeps exposed tool names compact.
+Set `cwd` only if you use a relative jar path such as `target/lsp-as-mcp.jar`; the project root to analyze is supplied in each MCP tool call.
 
 ## Tools
 

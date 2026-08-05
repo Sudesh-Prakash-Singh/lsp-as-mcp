@@ -18,8 +18,9 @@ For Codex, use a short server key in `~/.codex/config.toml` so the tool names st
 enabled = true
 command = "java"
 args = ["-jar", "D:\\fun-projects\\lsp-as-mcp\\target\\lsp-as-mcp.jar"]
-cwd = "D:\\fun-projects\\lsp-as-mcp"
 ```
+
+Set `cwd` only if you use a relative jar path such as `target/lsp-as-mcp.jar`; the project root to analyze is supplied in each MCP tool call.
 
 ## Tools
 
