@@ -88,6 +88,22 @@ public class LspMcpTools {
     return pretty(object("ok", true));
   }
 
+  @McpTool(name = "docker_status", description = "Report Docker fallback availability and sandbox configuration for a language/root.")
+  public String dockerStatus(
+    @McpToolParam(description = "Configured language/profile key.", required = true) String language,
+    @McpToolParam(description = "Project root path or file URI.", required = true) String root
+  ) {
+    var status = sessions.dockerStatus(language, root);
+    return pretty(object(
+      "enabled", status.enabled(),
+      "available", status.available(),
+      "unavailableReason", status.unavailableReason(),
+      "image", status.image(),
+      "installCommandCount", status.installCommandCount(),
+      "hasDockerCommand", status.hasDockerCommand()
+    ));
+  }
+
   @McpTool(name = "docker_exec", description = "Run a shell command inside the managed Docker sandbox for a language/root.")
   public String dockerExec(
     @McpToolParam(description = "Configured language/profile key.", required = true) String language,

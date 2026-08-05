@@ -135,6 +135,7 @@ Using a short MCP server key such as `lsp` keeps exposed tool names compact.
 - `profiles`: list configured LSP profiles and declared features
 - `connect`: register or update a profile, then initialize a session
 - `disconnect`: close a language/root session
+- `docker_status`: report Docker fallback availability and sandbox configuration
 - `docker_setup`: build/start a Docker sandbox and run configured setup commands
 - `docker_exec`: run a shell command inside the managed Docker sandbox
 - `definition`: find definitions for a source position

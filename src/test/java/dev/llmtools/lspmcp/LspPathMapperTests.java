@@ -21,6 +21,16 @@ class LspPathMapperTests {
   }
 
   @Test
+  void mapsHostPathsWithSpacesToContainerUris() {
+    var root = Path.of("C:/Office Work/repos/avert/CommandBridgeServices/fyp").toAbsolutePath().normalize();
+    var mapper = LspPathMapper.docker(root, "/workspace/project");
+
+    var uri = mapper.toServerFileUri(root.resolve("src/main/java/Message.java").toString());
+
+    assertThat(uri).isEqualTo("file:///workspace/project/src/main/java/Message.java");
+  }
+
+  @Test
   void mapsContainerUrisBackToHostUrisInResults() throws Exception {
     var root = Path.of("D:/work/project").toAbsolutePath().normalize();
     var mapper = LspPathMapper.docker(root, "/workspace/project");

@@ -51,6 +51,12 @@ public class LspSessionManager {
     return dockerSupport.execShell(root, config.profile(normalizedLanguage), command);
   }
 
+  public DockerSupport.DockerStatus dockerStatus(String language, String rootPathOrUri) {
+    var normalizedLanguage = language.toLowerCase(Locale.ROOT);
+    var root = UriUtils.toPath(rootPathOrUri);
+    return dockerSupport.status(root, config.profile(normalizedLanguage));
+  }
+
   @PreDestroy
   public void closeAll() {
     for (var client : sessions.values()) {
@@ -80,10 +86,17 @@ public class LspSessionManager {
     if (commandAvailability.isAvailable(profile.command())) {
       return new StdioLspTransport(profile.command(), root);
     }
-    if (dockerSupport.enabled() && !profile.dockerCommand().isEmpty()) {
+    if (dockerSupport.available() && !profile.dockerCommand().isEmpty()) {
       return new DockerLspTransport(dockerSupport, profile, root);
     }
-    throw new IllegalStateException("LSP command not found on PATH and Docker fallback is unavailable for " + profile.language() + ": " + profile.command());
+    throw new IllegalStateException(
+      "LSP command not found on PATH for "
+        + profile.language()
+        + ": "
+        + profile.command()
+        + ". Docker fallback is unavailable: "
+        + dockerSupport.unavailableReason()
+    );
   }
 
   private String sessionKey(String language, Path root) {

@@ -27,6 +27,7 @@ cwd = "D:\\fun-projects\\lsp-as-mcp"
 - `profiles`
 - `connect`
 - `disconnect`
+- `docker_status`
 - `docker_setup`
 - `docker_exec`
 - `references`

@@ -44,9 +44,30 @@ public class DockerSupport {
   private final Map<String, ContainerRef> containers = new ConcurrentHashMap<>();
   private DockerClient dockerClient;
   private DockerHttpClient httpClient;
+  private String unavailableReason;
 
   boolean enabled() {
     return envFlag("LSP_DOCKER_ENABLED", true);
+  }
+
+  boolean available() {
+    if (!enabled()) {
+      unavailableReason = "disabled by LSP_DOCKER_ENABLED=false";
+      return false;
+    }
+    try {
+      client();
+      unavailableReason = null;
+      return true;
+    } catch (RuntimeException error) {
+      unavailableReason = dockerErrorMessage(error);
+      closeClient();
+      return false;
+    }
+  }
+
+  String unavailableReason() {
+    return unavailableReason == null || unavailableReason.isBlank() ? "Docker daemon is not reachable" : unavailableReason;
   }
 
   String imageName(Path root, LspProfile profile) {
@@ -69,6 +90,18 @@ public class DockerSupport {
       + dockerfileFingerprint(normalizedRoot)
       + "-"
       + setupFingerprint(profile);
+  }
+
+  DockerStatus status(Path root, LspProfile profile) {
+    var available = available();
+    return new DockerStatus(
+      enabled(),
+      available,
+      available ? null : unavailableReason(),
+      imageName(root, profile),
+      profile.dockerInstallCommands().size(),
+      !profile.dockerCommand().isEmpty()
+    );
   }
 
   void prepare(Path root, LspProfile profile) {
@@ -127,20 +160,7 @@ public class DockerSupport {
       }
     }
     containers.clear();
-    if (dockerClient != null) {
-      try {
-        dockerClient.close();
-      } catch (IOException ignored) {
-      }
-      dockerClient = null;
-    }
-    if (httpClient != null) {
-      try {
-        httpClient.close();
-      } catch (IOException ignored) {
-      }
-      httpClient = null;
-    }
+    closeClient();
   }
 
   private void runConfiguredSetup(ContainerRef container, LspProfile profile) {
@@ -386,15 +406,34 @@ public class DockerSupport {
       return dockerClient;
     }
     var config = DefaultDockerClientConfig.createDefaultConfigBuilder().build();
-    httpClient = new ApacheDockerHttpClient.Builder()
+    var candidateHttpClient = new ApacheDockerHttpClient.Builder()
       .dockerHost(config.getDockerHost())
       .sslConfig(config.getSSLConfig())
       .connectionTimeout(Duration.ofSeconds(5))
       .responseTimeout(Duration.ZERO)
       .build();
-    dockerClient = DockerClientImpl.getInstance(config, httpClient);
-    dockerClient.pingCmd().exec();
-    return dockerClient;
+    var candidateDockerClient = DockerClientImpl.getInstance(config, candidateHttpClient);
+    try {
+      candidateDockerClient.pingCmd().exec();
+      httpClient = candidateHttpClient;
+      dockerClient = candidateDockerClient;
+      return dockerClient;
+    } catch (RuntimeException error) {
+      closeQuietly(candidateDockerClient);
+      closeQuietly(candidateHttpClient);
+      throw new IllegalStateException("Docker daemon is not reachable at " + config.getDockerHost() + ": " + dockerErrorMessage(error), error);
+    }
+  }
+
+  private synchronized void closeClient() {
+    if (dockerClient != null) {
+      closeQuietly(dockerClient);
+      dockerClient = null;
+    }
+    if (httpClient != null) {
+      closeQuietly(httpClient);
+      httpClient = null;
+    }
   }
 
   private static String[] dockerEnvironment() {
@@ -480,6 +519,18 @@ public class DockerSupport {
       case "0", "false", "no", "off" -> false;
       default -> defaultValue;
     };
+  }
+
+  private static String dockerErrorMessage(Throwable error) {
+    var cursor = error;
+    while (cursor != null) {
+      var message = cursor.getMessage();
+      if (message != null && !message.isBlank()) {
+        return message;
+      }
+      cursor = cursor.getCause();
+    }
+    return error.getClass().getSimpleName();
   }
 
   private static void closeQuietly(AutoCloseable closeable) {
@@ -572,4 +623,13 @@ public class DockerSupport {
   }
 
   record DockerCommandResult(int exitCode, String output) {}
+
+  record DockerStatus(
+    boolean enabled,
+    boolean available,
+    String unavailableReason,
+    String image,
+    int installCommandCount,
+    boolean hasDockerCommand
+  ) {}
 }
