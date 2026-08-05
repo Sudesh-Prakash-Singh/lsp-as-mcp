@@ -8,7 +8,7 @@
 - Maven
 - One or more language servers on `PATH`
 
-Default language-server commands:
+Default local language-server commands:
 
 - TypeScript/JavaScript: `typescript-language-server --stdio`
 - Python: `pyright-langserver --stdio`
@@ -16,6 +16,15 @@ Default language-server commands:
 - Rust: `rust-analyzer`
 - Java: `jdtls`
 - C/C++: `clangd`
+- PHP: `intelephense --stdio`
+- Ruby: `solargraph stdio`
+- C#: `csharp-ls`
+- Kotlin: `kotlin-lsp --stdio`
+- Lua: `lua-language-server`
+- YAML: `yaml-language-server --stdio`
+- JSON: `vscode-json-language-server --stdio`
+- Bash: `bash-language-server start`
+- Dockerfile: `docker-langserver --stdio`
 
 Only the language servers you use need to be installed.
 
@@ -38,6 +47,54 @@ java -jar target/lsp-as-mcp.jar
 ```
 
 The server runs over stdio and is intended to be launched by an MCP client.
+
+## Docker Fallback Mode
+
+When a built-in local language-server command is not available and Docker is enabled, `lsp-as-mcp` falls back to Docker automatically:
+
+1. Compute a project/language image tag such as `lsp-as-mcp/sandbox:java-<project-hash>-jdk21-<dockerfile-hash>`.
+2. If the image is missing, build it from [Dockerfile.lsp-tools](Dockerfile.lsp-tools) with `LSP_LANGUAGE=<language>`.
+3. Create or reuse one sandbox container for the requested project root and language.
+4. Mount the project at `/workspace/project`.
+5. Start the language server inside the container with Docker exec.
+
+The default Dockerfile installs only the selected language server and the runtime it needs. For project-specific framework tooling, add a project-local `.lsp-as-mcp/Dockerfile`; it will be used instead of the default Dockerfile when building that project's sandbox image.
+
+Build a Java sandbox image manually:
+
+```bash
+docker build --build-arg LSP_LANGUAGE=java -f Dockerfile.lsp-tools -t lsp-as-mcp/sandbox:java-local .
+```
+
+Build a Java sandbox image with a specific JDK runtime:
+
+```bash
+docker build --build-arg LSP_LANGUAGE=java --build-arg JAVA_VERSION=21 -f Dockerfile.lsp-tools -t lsp-as-mcp/sandbox:java21 .
+```
+
+Use `LSP_PROFILES` when one language needs a different toolbox image than the default:
+
+```bash
+LSP_PROFILES='{
+  "java": {
+    "dockerImage": "lsp-as-mcp/sandbox:java21"
+  }
+}' java -jar target/lsp-as-mcp.jar
+```
+
+For Java projects, the image JDK is the runtime used by JDT LS and project import/build tooling. The default Java sandbox uses JDK 21. Projects that need Java 25 can set `LSP_DOCKER_JAVA_VERSION=25`, point the Java profile at a version-specific `dockerImage`, or provide a project-local `.lsp-as-mcp/Dockerfile`.
+
+Generated image tags include the selected Java or Node runtime and a Dockerfile fingerprint. That means a Java 21 sandbox, a Java 25 sandbox, and a project Dockerfile revision get separate images instead of reusing an incompatible one.
+
+Docker mode settings:
+
+- `LSP_DOCKER_ENABLED`: defaults to `true`
+- `LSP_DOCKER_IMAGE`: optional exact image override; unset means project/language-specific images
+- `LSP_DOCKER_AUTOBUILD`: defaults to `true`
+- `LSP_DOCKER_KEEP_CONTAINERS`: defaults to `false`
+- `LSP_DOCKER_JAVA_VERSION`: defaults to `21`
+- `LSP_DOCKER_KOTLIN_JAVA_VERSION`: defaults to `25`
+- `LSP_DOCKER_NODE_VERSION`: defaults to `24.12.0`
 
 ## Codex Configuration
 
@@ -91,6 +148,8 @@ Supported profile fields:
 - `languageId`
 - `transport`
 - `command`
+- `dockerCommand`
+- `dockerImage`
 - `host`
 - `port`
 - `initializationOptions`

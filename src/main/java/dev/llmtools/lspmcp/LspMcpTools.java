@@ -31,6 +31,8 @@ public class LspMcpTools {
           "languageId", profile.languageId(),
           "transport", profile.transport().name().toLowerCase(),
           "command", profile.command(),
+          "dockerCommand", profile.dockerCommand(),
+          "dockerImage", profile.dockerImage(),
           "host", profile.host(),
           "port", profile.port(),
           "features", profile.features()
@@ -117,8 +119,9 @@ public class LspMcpTools {
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
     @McpToolParam(description = "Source file path or file URI.", required = true) String file
   ) {
-    return pretty(clientFor(language, root).request("textDocument/documentSymbol", object(
-      "textDocument", object("uri", UriUtils.toFileUri(file))
+    var client = clientFor(language, root);
+    return pretty(client.request("textDocument/documentSymbol", object(
+      "textDocument", object("uri", client.fileUri(file))
     )));
   }
 
@@ -140,9 +143,10 @@ public class LspMcpTools {
     @McpToolParam(description = "Document version.", required = false) Integer version,
     @McpToolParam(description = "Language-server language id.", required = false) String languageId
   ) {
-    clientFor(language, root).notify("textDocument/didOpen", object(
+    var client = clientFor(language, root);
+    client.notify("textDocument/didOpen", object(
       "textDocument", object(
-        "uri", UriUtils.toFileUri(file),
+        "uri", client.fileUri(file),
         "languageId", languageId == null || languageId.isBlank() ? sessions.languageId(language) : languageId,
         "version", version == null ? 1 : version,
         "text", text
@@ -157,8 +161,9 @@ public class LspMcpTools {
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
     @McpToolParam(description = "Optional source file path or file URI.", required = false) String file
   ) {
+    var client = clientFor(language, root);
     var uri = file == null || file.isBlank() ? null : UriUtils.toFileUri(file);
-    return pretty(clientFor(language, root).getDiagnostics(uri));
+    return pretty(client.getDiagnostics(uri));
   }
 
   @McpTool(name = "request", description = "Send a raw LSP request for profile-specific features not covered by typed tools.")
@@ -226,14 +231,15 @@ public class LspMcpTools {
   ) {
     requireNonNegative("line", line);
     requireNonNegative("character", character);
+    var client = clientFor(language, root);
     var params = object(
-      "textDocument", object("uri", UriUtils.toFileUri(file)),
+      "textDocument", object("uri", client.fileUri(file)),
       "position", object("line", line, "character", character)
     );
     if (extra != null) {
       extra.properties().forEach(entry -> params.set(entry.getKey(), entry.getValue()));
     }
-    return clientFor(language, root).request(method, params);
+    return client.request(method, params);
   }
 
   private LspClient clientFor(String language, String root) {

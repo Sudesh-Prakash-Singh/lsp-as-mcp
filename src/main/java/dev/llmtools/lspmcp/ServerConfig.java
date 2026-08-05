@@ -69,6 +69,8 @@ public class ServerConfig {
       override.languageId() != null ? override.languageId() : existing != null ? existing.languageId() : language,
       override.transport() != null ? LspProfile.TransportKind.from(override.transport()) : existing != null ? existing.transport() : LspProfile.TransportKind.STDIO,
       override.command() != null ? override.command() : existing != null ? existing.command() : List.of(),
+      override.dockerCommand() != null ? override.dockerCommand() : existing != null ? existing.dockerCommand() : null,
+      override.dockerImage() != null ? override.dockerImage() : existing != null ? existing.dockerImage() : null,
       override.host() != null ? override.host() : existing != null ? existing.host() : "127.0.0.1",
       override.port() != null ? override.port() : existing != null ? existing.port() : null,
       override.initializationOptions() != null ? override.initializationOptions() : existing != null ? existing.initializationOptions() : MAPPER.createObjectNode(),
@@ -89,17 +91,28 @@ public class ServerConfig {
     profiles.put("java", stdio("java", "java", List.of("jdtls"), emptyOptions, common));
     profiles.put("c", stdio("c", "c", List.of("clangd"), emptyOptions, common));
     profiles.put("cpp", stdio("cpp", "cpp", List.of("clangd"), emptyOptions, common));
+    profiles.put("php", stdio("php", "php", List.of("intelephense", "--stdio"), emptyOptions, common));
+    profiles.put("ruby", stdio("ruby", "ruby", List.of("solargraph", "stdio"), emptyOptions, common));
+    profiles.put("csharp", stdio("csharp", "csharp", List.of("csharp-ls"), emptyOptions, common));
+    profiles.put("kotlin", stdio("kotlin", "kotlin", List.of("kotlin-lsp", "--stdio"), emptyOptions, common));
+    profiles.put("lua", stdio("lua", "lua", List.of("lua-language-server"), emptyOptions, common));
+    profiles.put("yaml", stdio("yaml", "yaml", List.of("yaml-language-server", "--stdio"), emptyOptions, common));
+    profiles.put("json", stdio("json", "json", List.of("vscode-json-language-server", "--stdio"), emptyOptions, common));
+    profiles.put("bash", stdio("bash", "shellscript", List.of("bash-language-server", "start"), emptyOptions, common));
+    profiles.put("dockerfile", stdio("dockerfile", "dockerfile", List.of("docker-langserver", "--stdio"), emptyOptions, common));
     return profiles;
   }
 
   private static LspProfile stdio(String language, String languageId, List<String> command, JsonNode options, Set<String> features) {
-    return new LspProfile(language, languageId, LspProfile.TransportKind.STDIO, command, null, null, options, features);
+    return new LspProfile(language, languageId, LspProfile.TransportKind.STDIO, command, command, null, null, null, options, features);
   }
 
   private record PartialLspProfile(
     String languageId,
     String transport,
     List<String> command,
+    List<String> dockerCommand,
+    String dockerImage,
     String host,
     Integer port,
     JsonNode initializationOptions,

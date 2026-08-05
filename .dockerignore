@@ -4,3 +4,4 @@ target/
 .mvn/
 .git/
 *.log
+logs/

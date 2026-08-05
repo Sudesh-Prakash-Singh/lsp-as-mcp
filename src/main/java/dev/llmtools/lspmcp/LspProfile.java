@@ -2,7 +2,6 @@ package dev.llmtools.lspmcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -12,6 +11,8 @@ public record LspProfile(
   String languageId,
   TransportKind transport,
   List<String> command,
+  List<String> dockerCommand,
+  String dockerImage,
   String host,
   Integer port,
   JsonNode initializationOptions,
@@ -29,18 +30,13 @@ public record LspProfile(
       transport = TransportKind.STDIO;
     }
     command = command == null ? List.of() : List.copyOf(command);
+    dockerCommand = dockerCommand == null ? command : List.copyOf(dockerCommand);
     features = features == null ? Set.of() : Set.copyOf(features);
-  }
-
-  LspTransport createTransport(Path root) {
-    return switch (transport) {
-      case STDIO -> new StdioLspTransport(command, root);
-      case TCP -> new TcpLspTransport(host, port == null ? 0 : port);
-    };
   }
 
   public enum TransportKind {
     STDIO,
+    DOCKER,
     TCP;
 
     static TransportKind from(String raw) {

@@ -27,6 +27,7 @@ public class LspClient {
   private final String rootUri;
   private final LspProfile profile;
   private final LspTransport transport;
+  private final LspPathMapper pathMapper;
   private final AtomicInteger nextId = new AtomicInteger(1);
   private final Map<String, CompletableFuture<JsonNode>> pending = new ConcurrentHashMap<>();
   private final Map<String, ObjectNode> diagnostics = new ConcurrentHashMap<>();
@@ -34,11 +35,12 @@ public class LspClient {
   private boolean initialized;
   private boolean started;
 
-  public LspClient(LspProfile profile, String rootUri, LspTransport transport) {
+  public LspClient(LspProfile profile, String rootUri, LspTransport transport, LspPathMapper pathMapper) {
     this.language = profile.language();
     this.rootUri = rootUri;
     this.profile = profile;
     this.transport = transport;
+    this.pathMapper = pathMapper == null ? LspPathMapper.identity(null) : pathMapper;
   }
 
   public synchronized void ensureInitialized() {
@@ -87,7 +89,7 @@ public class LspClient {
 
     write(message);
     try {
-      return future.join();
+      return pathMapper.toClientTree(future.join());
     } catch (RuntimeException error) {
       if (error.getCause() instanceof RuntimeException runtime) {
         throw runtime;
@@ -119,7 +121,7 @@ public class LspClient {
 
     write(message);
     try {
-      return future.join();
+      return pathMapper.toClientTree(future.join());
     } catch (RuntimeException error) {
       if (error.getCause() instanceof RuntimeException runtime) {
         throw runtime;
@@ -131,6 +133,10 @@ public class LspClient {
   public void notify(String method, JsonNode params) {
     start();
     write(object("jsonrpc", "2.0", "method", method, "params", params));
+  }
+
+  public String fileUri(String file) {
+    return pathMapper.toServerFileUri(file);
   }
 
   public ArrayNode getDiagnostics(String uri) {
@@ -170,7 +176,7 @@ public class LspClient {
 
   private void write(ObjectNode message) {
     try {
-      var body = MAPPER.writeValueAsBytes(message);
+      var body = MAPPER.writeValueAsBytes(pathMapper.toServerTree(message));
       transport.writeMessage(body);
     } catch (Exception error) {
       throw new IllegalStateException("Failed to write LSP message for " + language, error);
@@ -194,7 +200,7 @@ public class LspClient {
 
   private void handleMessage(JsonNode message) {
     if ("textDocument/publishDiagnostics".equals(message.path("method").asText()) && message.path("params").isObject()) {
-      var params = (ObjectNode) message.path("params");
+      var params = (ObjectNode) pathMapper.toClientTree(message.path("params"));
       var uri = params.path("uri").asText(null);
       if (uri != null) {
         var record = MAPPER.createObjectNode();
