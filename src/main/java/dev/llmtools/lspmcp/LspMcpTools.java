@@ -20,7 +20,7 @@ public class LspMcpTools {
     this.config = config;
   }
 
-  @McpTool(name = "lsp_profiles", description = "List configured LSP profiles and their declared features.")
+  @McpTool(name = "profiles", description = "List configured LSP profiles and their declared features.")
   public String profiles() {
     var result = mapper.createObjectNode();
     config.profiles().entrySet().stream()
@@ -39,7 +39,7 @@ public class LspMcpTools {
     return pretty(result);
   }
 
-  @McpTool(name = "lsp_connect", description = "Register or update an LSP profile at runtime and initialize a session for a project root.")
+  @McpTool(name = "connect", description = "Register or update an LSP profile at runtime and initialize a session for a project root.")
   public String connect(
     @McpToolParam(description = "Language/profile key to register or connect.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -67,7 +67,7 @@ public class LspMcpTools {
     }
   }
 
-  @McpTool(name = "lsp_disconnect", description = "Close an initialized LSP session for a language/profile and project root.")
+  @McpTool(name = "disconnect", description = "Close an initialized LSP session for a language/profile and project root.")
   public String disconnect(
     @McpToolParam(description = "Configured language/profile key.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root
@@ -76,7 +76,7 @@ public class LspMcpTools {
     return pretty(object("ok", true));
   }
 
-  @McpTool(name = "lsp_definition", description = "Find definitions for a symbol position using a configured language server.")
+  @McpTool(name = "definition", description = "Find definitions for a symbol position using a configured language server.")
   public String definition(
     @McpToolParam(description = "Language key such as typescript, python, go, rust, java, c, or cpp.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -87,7 +87,7 @@ public class LspMcpTools {
     return pretty(textDocumentPositionRequest("textDocument/definition", language, root, file, line, character, null));
   }
 
-  @McpTool(name = "lsp_references", description = "Find references for a symbol position using a configured language server.")
+  @McpTool(name = "references", description = "Find references for a symbol position using a configured language server.")
   public String references(
     @McpToolParam(description = "Language key such as typescript, python, go, rust, java, c, or cpp.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -100,7 +100,7 @@ public class LspMcpTools {
     return pretty(textDocumentPositionRequest("textDocument/references", language, root, file, line, character, extra));
   }
 
-  @McpTool(name = "lsp_hover", description = "Get hover/type information for a symbol position.")
+  @McpTool(name = "hover", description = "Get hover/type information for a symbol position.")
   public String hover(
     @McpToolParam(description = "Language key such as typescript, python, go, rust, java, c, or cpp.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -111,7 +111,7 @@ public class LspMcpTools {
     return pretty(textDocumentPositionRequest("textDocument/hover", language, root, file, line, character, null));
   }
 
-  @McpTool(name = "lsp_document_symbols", description = "List symbols in a document.")
+  @McpTool(name = "symbols", description = "List symbols in a document.")
   public String documentSymbols(
     @McpToolParam(description = "Language key such as typescript, python, go, rust, java, c, or cpp.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -122,7 +122,7 @@ public class LspMcpTools {
     )));
   }
 
-  @McpTool(name = "lsp_workspace_symbols", description = "Search workspace symbols.")
+  @McpTool(name = "workspace_symbols", description = "Search workspace symbols.")
   public String workspaceSymbols(
     @McpToolParam(description = "Language key such as typescript, python, go, rust, java, c, or cpp.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -131,7 +131,7 @@ public class LspMcpTools {
     return pretty(clientFor(language, root).request("workspace/symbol", object("query", query)));
   }
 
-  @McpTool(name = "lsp_open_document", description = "Open or refresh a document in the language server. Useful before diagnostics.")
+  @McpTool(name = "open", description = "Open or refresh a document in the language server. Useful before diagnostics.")
   public String openDocument(
     @McpToolParam(description = "Language key such as typescript, python, go, rust, java, c, or cpp.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -151,7 +151,7 @@ public class LspMcpTools {
     return pretty(object("ok", true));
   }
 
-  @McpTool(name = "lsp_diagnostics", description = "Return diagnostics most recently published by the language server.")
+  @McpTool(name = "diagnostics", description = "Return diagnostics most recently published by the language server.")
   public String diagnostics(
     @McpToolParam(description = "Language key such as typescript, python, go, rust, java, c, or cpp.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -161,7 +161,7 @@ public class LspMcpTools {
     return pretty(clientFor(language, root).getDiagnostics(uri));
   }
 
-  @McpTool(name = "lsp_request", description = "Send a raw LSP request for profile-specific features not covered by typed tools.")
+  @McpTool(name = "request", description = "Send a raw LSP request for profile-specific features not covered by typed tools.")
   public String request(
     @McpToolParam(description = "Configured language/profile key.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -179,7 +179,7 @@ public class LspMcpTools {
     }
   }
 
-  @McpTool(name = "lsp_notify", description = "Send a raw LSP notification for profile-specific features not covered by typed tools.")
+  @McpTool(name = "notify", description = "Send a raw LSP notification for profile-specific features not covered by typed tools.")
   public String notify(
     @McpToolParam(description = "Configured language/profile key.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,
@@ -198,7 +198,7 @@ public class LspMcpTools {
     }
   }
 
-  @McpTool(name = "lsp_raw_message", description = "Send a full JSON-RPC message to an LSP server. Messages with an id wait for a response; messages without an id are notifications.")
+  @McpTool(name = "raw", description = "Send a full JSON-RPC message to an LSP server. Messages with an id wait for a response; messages without an id are notifications.")
   public String rawMessage(
     @McpToolParam(description = "Configured language/profile key.", required = true) String language,
     @McpToolParam(description = "Project root path or file URI.", required = true) String root,

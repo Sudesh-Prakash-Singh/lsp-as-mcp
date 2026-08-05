@@ -6,26 +6,36 @@ This project runs a local MCP stdio server and starts language servers from prof
 
 ```bash
 mvn package
-java -jar target/llm-tools-lsp-mcp-0.1.0.jar
+java -jar target/lsp-as-mcp.jar
 ```
 
 Configure your MCP client to run that command.
 
+For Codex, use a short server key in `~/.codex/config.toml` so the tool names stay compact:
+
+```toml
+[mcp_servers.lsp]
+enabled = true
+command = "java"
+args = ["-jar", "D:\\fun-projects\\lsp-as-mcp\\target\\lsp-as-mcp.jar"]
+cwd = "D:\\fun-projects\\lsp-as-mcp"
+```
+
 ## Tools
 
-- `lsp_definition`
-- `lsp_profiles`
-- `lsp_connect`
-- `lsp_disconnect`
-- `lsp_references`
-- `lsp_hover`
-- `lsp_document_symbols`
-- `lsp_workspace_symbols`
-- `lsp_open_document`
-- `lsp_diagnostics`
-- `lsp_request`
-- `lsp_notify`
-- `lsp_raw_message`
+- `definition`
+- `profiles`
+- `connect`
+- `disconnect`
+- `references`
+- `hover`
+- `symbols`
+- `workspace_symbols`
+- `open`
+- `diagnostics`
+- `request`
+- `notify`
+- `raw`
 
 Tool arguments use normal LSP positions: zero-based `line` and `character`.
 
@@ -59,7 +69,7 @@ LSP_PROFILES='{
     "host": "127.0.0.1",
     "port": 2093
   }
-}' java -jar target/llm-tools-lsp-mcp-0.1.0.jar
+}' java -jar target/lsp-as-mcp.jar
 ```
 
 Supported profile fields:
@@ -72,7 +82,7 @@ Supported profile fields:
 - `initializationOptions`
 - `features`
 
-You can also register a profile and connect immediately at runtime with `lsp_connect`.
+You can also register a profile and connect immediately at runtime with `connect`.
 
 Example arguments:
 
@@ -84,4 +94,4 @@ Example arguments:
 }
 ```
 
-Use `lsp_disconnect` to close the session for a language/profile and root.
+Use `disconnect` to close the session for a language/profile and root.
