@@ -20,6 +20,7 @@ class LspProfileTests {
       null,
       null,
       null,
+      null,
       Set.of()
     );
 

@@ -39,6 +39,18 @@ public class LspSessionManager {
     }
   }
 
+  public void prepareDocker(String language, String rootPathOrUri) {
+    var normalizedLanguage = language.toLowerCase(Locale.ROOT);
+    var root = UriUtils.toPath(rootPathOrUri);
+    dockerSupport.prepare(root, config.profile(normalizedLanguage));
+  }
+
+  public DockerSupport.DockerCommandResult dockerExec(String language, String rootPathOrUri, String command) {
+    var normalizedLanguage = language.toLowerCase(Locale.ROOT);
+    var root = UriUtils.toPath(rootPathOrUri);
+    return dockerSupport.execShell(root, config.profile(normalizedLanguage), command);
+  }
+
   @PreDestroy
   public void closeAll() {
     for (var client : sessions.values()) {

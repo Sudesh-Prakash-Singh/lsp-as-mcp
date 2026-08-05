@@ -39,6 +39,7 @@ public class DockerSupport {
   static final String CONTAINER_ROOT = "/workspace/project";
   private static final String DEFAULT_IMAGE_PREFIX = "lsp-as-mcp/sandbox";
   private static final String LABEL = "dev.llmtools.lsp-as-mcp";
+  private static final String SETUP_MARKER_ROOT = "/opt/lsp-as-mcp/setup";
 
   private final Map<String, ContainerRef> containers = new ConcurrentHashMap<>();
   private DockerClient dockerClient;
@@ -65,8 +66,43 @@ public class DockerSupport {
       + "-"
       + safeTagPart(buildVariant(profile))
       + "-"
-      + dockerfileFingerprint(normalizedRoot);
+      + dockerfileFingerprint(normalizedRoot)
+      + "-"
+      + setupFingerprint(profile);
   }
+
+  void prepare(Path root, LspProfile profile) {
+    if (!enabled()) {
+      throw new IllegalStateException("Docker LSP fallback is disabled by LSP_DOCKER_ENABLED=false");
+    }
+    var image = imageName(root, profile);
+    var container = acquireContainer(root, image, profile);
+    try {
+      runConfiguredSetup(container, profile);
+    } finally {
+      releaseContainer(container.key());
+    }
+  }
+
+  DockerCommandResult execShell(Path root, LspProfile profile, String command) {
+    if (!enabled()) {
+      throw new IllegalStateException("Docker LSP fallback is disabled by LSP_DOCKER_ENABLED=false");
+    }
+    if (!envFlag("LSP_DOCKER_EXEC_ENABLED", true)) {
+      throw new IllegalStateException("Docker command execution is disabled by LSP_DOCKER_EXEC_ENABLED=false");
+    }
+    if (command == null || command.isBlank()) {
+      throw new IllegalArgumentException("Docker command must not be blank");
+    }
+    var image = imageName(root, profile);
+    var container = acquireContainer(root, image, profile);
+    try {
+      return runShellForResult(container, command, false);
+    } finally {
+      releaseContainer(container.key());
+    }
+  }
+
 
   DockerExecSession startExec(Path root, LspProfile profile) throws IOException {
     if (!enabled()) {
@@ -75,6 +111,7 @@ public class DockerSupport {
     var image = imageName(root, profile);
     var container = acquireContainer(root, image, profile);
     try {
+      runConfiguredSetup(container, profile);
       return startExec(container, profile.dockerCommand());
     } catch (RuntimeException | IOException error) {
       releaseContainer(container.key());
@@ -84,8 +121,10 @@ public class DockerSupport {
 
   @PreDestroy
   public synchronized void close() {
-    for (var ref : containers.values()) {
-      stopAndRemove(ref);
+    if (!envFlag("LSP_DOCKER_KEEP_CONTAINERS", true)) {
+      for (var ref : containers.values()) {
+        stopAndRemove(ref);
+      }
     }
     containers.clear();
     if (dockerClient != null) {
@@ -101,6 +140,62 @@ public class DockerSupport {
       } catch (IOException ignored) {
       }
       httpClient = null;
+    }
+  }
+
+  private void runConfiguredSetup(ContainerRef container, LspProfile profile) {
+    if (profile.dockerInstallCommands().isEmpty()) {
+      return;
+    }
+    var marker = SETUP_MARKER_ROOT + "/" + setupFingerprint(profile) + ".done";
+    if (runShell(container, "test -f " + marker) == 0) {
+      return;
+    }
+    for (var command : profile.dockerInstallCommands()) {
+      if (command == null || command.isBlank()) {
+        continue;
+      }
+      var exitCode = runShell(container, command);
+      if (exitCode != 0) {
+        throw new IllegalStateException("Docker setup command failed for " + profile.language() + " with exit code " + exitCode + ": " + command);
+      }
+    }
+    var markerExit = runShell(container, "mkdir -p " + SETUP_MARKER_ROOT + " && touch " + marker);
+    if (markerExit != 0) {
+      throw new IllegalStateException("Failed to write Docker setup marker for " + profile.language());
+    }
+  }
+
+  private int runShell(ContainerRef container, String command) {
+    return runShellForResult(container, command, true).exitCode();
+  }
+
+  private DockerCommandResult runShellForResult(ContainerRef container, String command, boolean echoOutput) {
+    return runExecAndWait(container, List.of("/bin/sh", "-lc", command), echoOutput);
+  }
+
+  private DockerCommandResult runExecAndWait(ContainerRef container, List<String> command, boolean echoOutput) {
+    var client = client();
+    ExecCreateCmdResponse exec = client.execCreateCmd(container.containerId())
+      .withAttachStdout(true)
+      .withAttachStderr(true)
+      .withTty(false)
+      .withWorkingDir(CONTAINER_ROOT)
+      .withCmd(command.toArray(String[]::new))
+      .exec();
+
+    try {
+      var callback = new CapturingCallback(echoOutput);
+      client.execStartCmd(exec.getId())
+        .withDetach(false)
+        .withTty(false)
+        .exec(callback)
+        .awaitCompletion();
+      var exitCode = client.inspectExecCmd(exec.getId()).exec().getExitCodeLong();
+      return new DockerCommandResult(exitCode == null ? 0 : exitCode.intValue(), callback.output());
+    } catch (InterruptedException error) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while running Docker setup command", error);
     }
   }
 
@@ -188,7 +283,7 @@ public class DockerSupport {
       return;
     }
     containers.remove(key);
-    if (!envFlag("LSP_DOCKER_KEEP_CONTAINERS", false)) {
+    if (!envFlag("LSP_DOCKER_KEEP_CONTAINERS", true)) {
       stopAndRemove(ref);
     }
   }
@@ -252,6 +347,7 @@ public class DockerSupport {
         .withName(name)
         .withWorkingDir(CONTAINER_ROOT)
         .withCmd("sleep", "infinity")
+        .withEnv(dockerEnvironment())
         .withLabels(Map.of(LABEL, "true", LABEL + ".root", root.toString()))
         .withHostConfig(HostConfig.newHostConfig().withBinds(new Bind(root.toString(), new Volume(CONTAINER_ROOT), AccessMode.rw)))
         .exec();
@@ -301,6 +397,16 @@ public class DockerSupport {
     return dockerClient;
   }
 
+  private static String[] dockerEnvironment() {
+    return new String[] {
+      "LSP_DOCKER_NODE_VERSION=" + env("LSP_DOCKER_NODE_VERSION", "24.12.0"),
+      "LSP_DOCKER_JAVA_VERSION=" + env("LSP_DOCKER_JAVA_VERSION", "21"),
+      "LSP_DOCKER_KOTLIN_JAVA_VERSION=" + env("LSP_DOCKER_KOTLIN_JAVA_VERSION", "25"),
+      "LSP_DOCKER_KOTLIN_LSP_VERSION=" + env("LSP_DOCKER_KOTLIN_LSP_VERSION", "262.9593.0"),
+      "LSP_DOCKER_LUA_LS_VERSION=" + env("LSP_DOCKER_LUA_LS_VERSION", "3.18.2")
+    };
+  }
+
   private static String digest(String value) {
     try {
       var bytes = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
@@ -335,10 +441,19 @@ public class DockerSupport {
     }
   }
 
+  private static String setupFingerprint(LspProfile profile) {
+    if (profile.dockerInstallCommands().isEmpty()) {
+      return "nosetup";
+    }
+    return digest(String.join("\n", profile.dockerInstallCommands()));
+  }
+
   private static String buildVariant(LspProfile profile) {
     return switch (profile.language()) {
       case "java" -> "jdk" + env("LSP_DOCKER_JAVA_VERSION", "21");
-      case "kotlin" -> "jdk" + env("LSP_DOCKER_KOTLIN_JAVA_VERSION", "25");
+      case "kotlin" -> "jdk" + env("LSP_DOCKER_KOTLIN_JAVA_VERSION", "25")
+        + "-kotlin" + env("LSP_DOCKER_KOTLIN_LSP_VERSION", "262.9593.0");
+      case "lua" -> "lua" + env("LSP_DOCKER_LUA_LS_VERSION", "3.18.2");
       case "typescript", "javascript", "json", "yaml", "bash", "dockerfile", "python", "php" ->
         "node" + env("LSP_DOCKER_NODE_VERSION", "24.12.0");
       default -> "default";
@@ -371,6 +486,43 @@ public class DockerSupport {
     try {
       closeable.close();
     } catch (Exception ignored) {
+    }
+  }
+
+  private static final class CapturingCallback extends ResultCallback.Adapter<Frame> {
+    private static final int OUTPUT_LIMIT = 1024 * 1024;
+    private final java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+    private final boolean echoOutput;
+    private boolean truncated;
+
+    private CapturingCallback(boolean echoOutput) {
+      this.echoOutput = echoOutput;
+    }
+
+    @Override
+    public void onNext(Frame frame) {
+      try {
+        if (frame.getPayload() != null) {
+          if (output.size() < OUTPUT_LIMIT) {
+            var remaining = OUTPUT_LIMIT - output.size();
+            output.write(frame.getPayload(), 0, Math.min(frame.getPayload().length, remaining));
+            truncated = frame.getPayload().length > remaining;
+          } else {
+            truncated = true;
+          }
+          if (echoOutput) {
+            System.err.write(frame.getPayload());
+            System.err.flush();
+          }
+        }
+      } catch (IOException error) {
+        onError(error);
+      }
+    }
+
+    String output() {
+      var text = output.toString(StandardCharsets.UTF_8);
+      return truncated ? text + "\n[output truncated]\n" : text;
     }
   }
 
@@ -418,4 +570,6 @@ public class DockerSupport {
       owner.releaseContainer(containerKey);
     }
   }
+
+  record DockerCommandResult(int exitCode, String output) {}
 }

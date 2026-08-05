@@ -12,6 +12,7 @@ public record LspProfile(
   TransportKind transport,
   List<String> command,
   List<String> dockerCommand,
+  List<String> dockerInstallCommands,
   String dockerImage,
   String host,
   Integer port,
@@ -31,6 +32,7 @@ public record LspProfile(
     }
     command = command == null ? List.of() : List.copyOf(command);
     dockerCommand = dockerCommand == null ? command : List.copyOf(dockerCommand);
+    dockerInstallCommands = dockerInstallCommands == null ? List.of() : List.copyOf(dockerInstallCommands);
     features = features == null ? Set.of() : Set.copyOf(features);
   }
 

@@ -18,6 +18,7 @@ class DockerSupportTests {
       LspProfile.TransportKind.STDIO,
       List.of("jdtls"),
       List.of("jdtls"),
+      List.of("echo setup"),
       null,
       null,
       null,
