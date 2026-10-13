@@ -31,8 +31,32 @@ public class LspClient {
   private final Map<String, CompletableFuture<JsonNode>> pending = new ConcurrentHashMap<>();
   private final Map<String, ObjectNode> diagnostics = new ConcurrentHashMap<>();
 
-  private boolean initialized;
-  private boolean started;
+  private volatile boolean initialized;
+  private volatile boolean started;
+  private volatile String lifecycle = "created";
+  private volatile String lastError;
+  private final Object progressLock = new Object();
+  private final Map<String, ObjectNode> progress = new java.util.LinkedHashMap<>();
+  private ObjectNode lastProgress;
+  private boolean progressObserved;
+
+  /** Nonblocking snapshot; does not initialize or send requests to the server. */
+  public ObjectNode status() {
+    synchronized (progressLock) {
+      var active = MAPPER.createArrayNode();
+      progress.values().forEach(item -> active.add(item.deepCopy()));
+      var state = lifecycle;
+      if ("initialized".equals(state)) {
+        state = active.isEmpty() ? "ready" : "loading";
+      }
+      return object(
+        "language", language, "root", rootUri, "state", state,
+        "initialized", initialized, "progressObserved", progressObserved,
+        "progress", active, "lastProgress", lastProgress == null ? null : lastProgress.deepCopy(),
+        "error", lastError
+      );
+    }
+  }
 
   public LspClient(LspProfile profile, String rootUri, LspTransport transport) {
     this.language = profile.language();
@@ -45,26 +69,41 @@ public class LspClient {
     if (initialized) {
       return;
     }
-    start();
+    if ("failed".equals(lifecycle) || "closed".equals(lifecycle)) {
+      throw new IllegalStateException("LSP session " + lifecycle + "; reconnect to retry. " + lastError);
+    }
+    lifecycle = "initializing";
+    try {
+      start();
 
-    var capabilities = MAPPER.createObjectNode();
-    capabilities.set("textDocument", object(
-      "definition", object("linkSupport", true),
-      "references", object(),
-      "hover", object("contentFormat", array("markdown", "plaintext")),
-      "documentSymbol", object("hierarchicalDocumentSymbolSupport", true),
-      "publishDiagnostics", object("relatedInformation", true)
-    ));
-    capabilities.set("workspace", object("symbol", object("dynamicRegistration", false)));
+      var capabilities = MAPPER.createObjectNode();
+      capabilities.set("textDocument", object(
+        "definition", object("linkSupport", true),
+        "references", object(),
+        "hover", object("contentFormat", array("markdown", "plaintext")),
+        "documentSymbol", object("hierarchicalDocumentSymbolSupport", true),
+        "publishDiagnostics", object("relatedInformation", true)
+      ));
+      capabilities.set("window", object("workDoneProgress", true));
+      capabilities.set("workspace", object("symbol", object("dynamicRegistration", false)));
 
-    request("initialize", object(
-      "processId", ProcessHandle.current().pid(),
-      "rootUri", rootUri,
-      "capabilities", capabilities,
-      "initializationOptions", profile.initializationOptions() == null ? object() : profile.initializationOptions()
-    ));
-    notify("initialized", object());
-    initialized = true;
+      request("initialize", object(
+        "processId", ProcessHandle.current().pid(),
+        "rootUri", rootUri,
+        "capabilities", capabilities,
+        "initializationOptions", profile.initializationOptions() == null ? object() : profile.initializationOptions()
+      ));
+      notify("initialized", object());
+      synchronized (progressLock) {
+        if (!"failed".equals(lifecycle)) {
+          initialized = true;
+          lifecycle = "initialized";
+        }
+      }
+    } catch (RuntimeException error) {
+      fail(error.getMessage());
+      throw error;
+    }
   }
 
   public JsonNode request(String method, JsonNode params) {
@@ -146,7 +185,9 @@ public class LspClient {
   }
 
   public synchronized void close() {
+    lifecycle = "closing";
     if (!started) {
+      lifecycle = "closed";
       return;
     }
     try {
@@ -155,6 +196,7 @@ public class LspClient {
         notify("exit", MAPPER.nullNode());
       }
     } finally {
+      lifecycle = "closed";
       transport.close();
       started = false;
       initialized = false;
@@ -162,6 +204,9 @@ public class LspClient {
   }
 
   private synchronized void start() {
+    if ("failed".equals(lifecycle) || "closed".equals(lifecycle)) {
+      throw new IllegalStateException("LSP session " + lifecycle + "; reconnect to retry");
+    }
     if (started) {
       return;
     }
@@ -177,6 +222,7 @@ public class LspClient {
       var body = MAPPER.writeValueAsBytes(message);
       transport.writeMessage(body);
     } catch (Exception error) {
+      fail("Failed to write LSP message for " + language + ": " + error.getMessage());
       throw new IllegalStateException("Failed to write LSP message for " + language, error);
     }
   }
@@ -186,17 +232,32 @@ public class LspClient {
       while (started) {
         var body = transport.readMessage();
         if (body == null) {
-          rejectAllPending("LSP connection closed");
+          fail("LSP connection closed");
           return;
         }
         handleMessage(MAPPER.readTree(body));
       }
     } catch (Exception error) {
-      rejectAllPending("LSP connection failed: " + error.getMessage());
+      fail("LSP connection failed: " + error.getMessage());
     }
   }
 
   private void handleMessage(JsonNode message) {
+    var method = message.path("method").asText();
+    if ("window/workDoneProgress/create".equals(method) && message.has("id")) {
+      write(object("jsonrpc", "2.0", "id", message.path("id"), "result", null));
+      return;
+    }
+    if ("$/progress".equals(method)) {
+      recordProgress(message.path("params"));
+      return;
+    }
+    // Server requests must never be mistaken for responses to our own request IDs.
+    if (message.has("method") && message.has("id")) {
+      write(object("jsonrpc", "2.0", "id", message.path("id"),
+        "error", object("code", -32601, "message", "Unsupported client method: " + method)));
+      return;
+    }
     if ("textDocument/publishDiagnostics".equals(message.path("method").asText()) && message.path("params").isObject()) {
       var params = (ObjectNode) message.path("params");
       var uri = params.path("uri").asText(null);
@@ -222,6 +283,45 @@ public class LspClient {
       return;
     }
     future.complete(message.has("result") ? message.path("result") : MAPPER.nullNode());
+  }
+
+  private void recordProgress(JsonNode params) {
+    var token = params.path("token");
+    var value = params.path("value");
+    var kind = value.path("kind").asText();
+    if ((!token.isTextual() && !token.isIntegralNumber()) || !value.isObject()
+      || !("begin".equals(kind) || "report".equals(kind) || "end".equals(kind))) {
+      return; // Includes partial-result progress, which is not work-done progress.
+    }
+    synchronized (progressLock) {
+      progressObserved = true;
+      var key = token.toString();
+      var previous = progress.get(key);
+      var record = previous == null || "begin".equals(kind) ? object("token", token) : previous.deepCopy();
+      for (var field : new String[]{"kind", "title", "message", "percentage", "cancellable"}) {
+        if (value.has(field)) {
+          record.set(field, value.get(field));
+        }
+      }
+      record.put("updatedAt", Instant.now().toString());
+      lastProgress = record;
+      if ("end".equals(kind)) {
+        progress.remove(key);
+      } else {
+        progress.put(key, record);
+      }
+    }
+  }
+
+  private void fail(String reason) {
+    synchronized (progressLock) {
+      if (!"closing".equals(lifecycle) && !"closed".equals(lifecycle)) {
+        lastError = reason;
+        lifecycle = "failed";
+        initialized = false;
+      }
+    }
+    rejectAllPending(reason);
   }
 
   private void rejectAllPending(String reason) {

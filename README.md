@@ -66,6 +66,7 @@ Set `cwd` only if you use a relative jar path such as `target/lsp-as-mcp.jar`; t
 
 - `profiles`: list configured LSP profiles and declared features
 - `connect`: register or update a profile, then initialize a session
+- `status`: inspect existing project sessions and reported work-done progress
 - `disconnect`: close a language/root session
 - `definition`: find definitions for a source position
 - `references`: find references for a source position
@@ -107,3 +108,33 @@ Supported profile fields:
 - `installHint`
 
 See [docs/lsp-mcp-server-usage.md](docs/lsp-mcp-server-usage.md) for more usage details.
+
+## Project status and progress
+
+Call `status` with no arguments to list existing sessions, or pass optional
+`language` and `root` filters (a filesystem path or file URI). It never starts a
+language server. No matching session returns `{"sessions": []}`; disconnected
+sessions are removed from the list. Poll the tool to see progress updates.
+
+```json
+{"language": "java", "root": "/path/to/project"}
+```
+
+Each session contains `language`, `root` (file URI), `state`, `initialized`,
+`progressObserved`, `progress` (active tasks), `lastProgress` (latest update,
+including completed tasks), and `error` (last connection/initialization failure).
+States are `created`, `initializing`, `loading`, `ready`, `closing`, or `failed`.
+Failed sessions remain visible until disconnected or replaced by `connect`.
+Failures before a session can be created, such as a missing executable, are
+returned by the calling tool and do not create a status entry.
+
+Progress uses standard LSP work-done notifications (`$/progress`) and supports
+server-initiated `window/workDoneProgress/create` requests. Tasks preserve the
+server's token, title, message, percentage and cancellable flag when supplied,
+plus an `updatedAt` timestamp. Percentages belong to individual tasks; there is
+no invented overall project percentage. Partial-result notifications are ignored.
+
+`ready` means initialization completed and no reported work-done task is active.
+It does **not** guarantee indexing has finished: language servers may perform
+background work without reporting it. `progressObserved: false` means no work-done
+progress has been received yet. This tool provides snapshots, not MCP push updates.

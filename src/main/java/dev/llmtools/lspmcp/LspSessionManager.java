@@ -1,5 +1,7 @@
 package dev.llmtools.lspmcp;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PreDestroy;
@@ -26,6 +28,21 @@ public class LspSessionManager {
     var client = sessions.computeIfAbsent(key, ignored -> createSession(normalizedLanguage, root));
     client.ensureInitialized();
     return client;
+  }
+
+  public ArrayNode status(String language, String rootPathOrUri) {
+    var result = new ObjectMapper().createArrayNode();
+    var normalizedLanguage = language == null || language.isBlank() ? null : language.toLowerCase(Locale.ROOT);
+    var rootUri = rootPathOrUri == null || rootPathOrUri.isBlank()
+      ? null : UriUtils.toPath(rootPathOrUri).toUri().toString();
+    sessions.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+      var snapshot = entry.getValue().status();
+      if ((normalizedLanguage == null || normalizedLanguage.equals(snapshot.path("language").asText()))
+        && (rootUri == null || rootUri.equals(snapshot.path("root").asText()))) {
+        result.add(snapshot);
+      }
+    });
+    return result;
   }
 
   public void disconnect(String language, String rootPathOrUri) {

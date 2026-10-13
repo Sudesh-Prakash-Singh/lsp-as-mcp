@@ -40,6 +40,14 @@ public class LspMcpTools {
     return pretty(result);
   }
 
+  @McpTool(name = "status", description = "Get existing project session states and language-server work-done progress without starting sessions. Ready means initialized with no reported active work, not guaranteed indexing completion.")
+  public String status(
+    @McpToolParam(description = "Optional language/profile filter.", required = false) String language,
+    @McpToolParam(description = "Optional project root path or file URI filter.", required = false) String root
+  ) {
+    return pretty(object("sessions", sessions.status(language, root)));
+  }
+
   @McpTool(name = "connect", description = "Register or update an LSP profile at runtime and initialize a session for a project root.")
   public String connect(
     @McpToolParam(description = "Language/profile key to register or connect.", required = true) String language,
