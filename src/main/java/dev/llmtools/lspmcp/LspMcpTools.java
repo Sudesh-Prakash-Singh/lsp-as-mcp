@@ -76,6 +76,18 @@ public class LspMcpTools {
     }
   }
 
+  @McpTool(name = "connect_session_start", description = "Ensure an LSP session is initialized and return Codex SessionStart hook output.")
+  public String connectSessionStart(
+    @McpToolParam(description = "Language/profile key.", required = true) String language,
+    @McpToolParam(description = "Project root path or file URI.", required = true) String root
+  ) {
+    sessions.get(language, root);
+    return pretty(object("hookSpecificOutput", object(
+      "hookEventName", "SessionStart",
+      "additionalContext", "LSP connected for " + language + " at " + root + "."
+    )));
+  }
+
   @McpTool(name = "disconnect", description = "Close an initialized LSP session for a language/profile and project root.")
   public String disconnect(
     @McpToolParam(description = "Configured language/profile key.", required = true) String language,

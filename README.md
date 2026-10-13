@@ -60,12 +60,54 @@ args = ["-jar", "D:\\fun-projects\\lsp-as-mcp\\target\\lsp-as-mcp.jar"]
 ```
 
 Using a short MCP server key such as `lsp` keeps exposed tool names compact.
-Set `cwd` only if you use a relative jar path such as `target/lsp-as-mcp.jar`; the project root to analyze is supplied in each MCP tool call.
+Set `cwd` only if you use a relative jar path such as `target/lsp-as-mcp.jar`; project roots are supplied through startup configuration or MCP tool calls.
+
+## Start language servers eagerly
+
+Set environment variables when launching the MCP server to initialize a session
+before any tool call. Any built-in or custom profile is supported:
+
+```bash
+LSP_STARTUP_LANGUAGE=python LSP_STARTUP_ROOT=/path/to/project \
+  java -jar target/lsp-as-mcp.jar
+```
+
+For several languages or projects:
+
+```bash
+LSP_STARTUP_SESSIONS='[{"language":"python","root":"/path/to/project"},{"language":"go","root":"/path/to/other-project"}]' \
+  java -jar target/lsp-as-mcp.jar
+```
+
+Alternatively, set `LSP_STARTUP_CONFIG=/absolute/path/to/lsp-startup.json`.
+The JSON file can define both custom `profiles` and startup `sessions`:
+
+```json
+{
+  "profiles": {
+    "python-custom": {
+      "languageId": "python",
+      "command": ["/absolute/path/to/pyright-langserver", "--stdio"]
+    }
+  },
+  "sessions": [
+    {"language": "python-custom", "root": "./project"},
+    {"language": "rust", "root": "./other-project"}
+  ]
+}
+```
+
+Relative project roots in the file resolve against the file's directory.
+Environment session lists replace file sessions; `LSP_PROFILES` overrides file
+profile fields. An empty `LSP_STARTUP_SESSIONS='[]'` disables file sessions.
+See the [startup configuration details](docs/lsp-mcp-server-usage.md#eager-startup)
+for command overrides, precedence, and MCP client configuration.
 
 ## Tools
 
 - `profiles`: list configured LSP profiles and declared features
 - `connect`: register or update a profile, then initialize a session
+- `connect_session_start`: ensure a session exists and return Codex SessionStart hook output
 - `status`: inspect existing project sessions and reported work-done progress
 - `disconnect`: close a language/root session
 - `definition`: find definitions for a source position
