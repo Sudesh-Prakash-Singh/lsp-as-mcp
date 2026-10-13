@@ -103,6 +103,20 @@ profile fields. An empty `LSP_STARTUP_SESSIONS='[]'` disables file sessions.
 See the [startup configuration details](docs/lsp-mcp-server-usage.md#eager-startup)
 for command overrides, precedence, and MCP client configuration.
 
+## Companion skill
+
+The [lsp-as-mcp skill](skills/lsp-as-mcp/SKILL.md) teaches agents to reuse sessions,
+check readiness before every LSP feature call, and use focused semantic queries.
+It polls for readiness for up to 60 seconds before falling back to source inspection.
+Its workflow and setup references ship with the skill.
+
+For Codex, copy the complete `skills/lsp-as-mcp` directory into
+`$CODEX_HOME/skills/` (or `~/.codex/skills/` when `CODEX_HOME` is unset).
+The skill supports automatic discovery or explicit invocation as `$lsp-as-mcp`.
+Connect this MCP server separately; installing the skill does not install or
+configure language servers. Other skill-capable agents can use the same core
+instructions with their own installation mechanism.
+
 ## Tools
 
 - `profiles`: list configured LSP profiles and declared features

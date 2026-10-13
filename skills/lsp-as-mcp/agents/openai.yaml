@@ -1,0 +1,5 @@
+interface:
+  display_name: "LSP as MCP"
+  short_description: "Use ready LSP sessions for precise code exploration"
+policy:
+  allow_implicit_invocation: true
